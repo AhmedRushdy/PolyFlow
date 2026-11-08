@@ -16,6 +16,72 @@ Simulate a SaaS usage metering platform: tenants submit API usage events; the pl
 - Observability: OpenTelemetry Collector, Prometheus, Tempo, Grafana.
 - Platform: Docker, Kind/Kubernetes, Helm, Argo CD, CI, k6.
 
+### Architecture diagram
+
+The diagram below is rendered natively by GitHub from Mermaid source, so it stays version-controlled and easy to maintain.
+
+```mermaid
+flowchart TB
+    Client[Usage client / customer application]
+    Load[k6 load tests]
+
+    subgraph Cluster["Kubernetes cluster (Kind / EKS / AKS)"]
+        A["Service A — Go / gRPC<br/>Validate usage request"]
+        DB1[("PostgreSQL — Service A<br/>usage_events + outbox_events")]
+        Worker["Outbox worker — Go"]
+        Kafka[["Apache Kafka<br/>usage-events topic"]]
+        B["Service B — Python / FastAPI<br/>Consume and aggregate"]
+        DB2[("PostgreSQL — Service B<br/>tenant_usage_aggregates<br/>processed_events")]
+        API["Usage query REST API"]
+
+        Client -->|"gRPC: submit usage"| A
+        A -->|"One ACID transaction"| DB1
+        Worker -->|"Poll pending outbox rows"| DB1
+        Worker -->|"Publish with retry"| Kafka
+        Kafka -->|"At-least-once delivery"| B
+        B -->|"Atomic aggregate + dedupe commit"| DB2
+        B --> API
+        Client -->|"REST: query usage"| API
+        Load -. "Load / latency checks" .-> A
+        Load -. "Query load" .-> API
+    end
+
+    subgraph Observability["Observability"]
+        OTel["OpenTelemetry Collector"]
+        Prom["Prometheus — metrics"]
+        Tempo["Tempo — traces"]
+        Grafana["Grafana — dashboards"]
+        OTel --> Prom
+        OTel --> Tempo
+        Prom --> Grafana
+        Tempo --> Grafana
+    end
+
+    A -. "traces + metrics" .-> OTel
+    Worker -. "traces + metrics" .-> OTel
+    B -. "traces + metrics" .-> OTel
+
+    subgraph Delivery["Build and delivery"]
+        Actions["GitHub Actions<br/>test · build · scan"]
+        Helm["Helm charts"]
+        Argo["Argo CD<br/>GitOps reconciliation"]
+        Actions --> Helm
+        Helm --> Argo
+        Argo -. "Deploy manifests" .-> Cluster
+    end
+
+    classDef go fill:#d9f2f2,stroke:#168b98,color:#102a33
+    classDef python fill:#e0f5df,stroke:#39934a,color:#17351b
+    classDef data fill:#e4edff,stroke:#356ac3,color:#10254a
+    classDef infra fill:#f0e5ff,stroke:#8755c4,color:#291344
+    class A,Worker go
+    class B,API python
+    class DB1,DB2 data
+    class Kafka,OTel,Prom,Tempo,Grafana,Actions,Helm,Argo infra
+```
+
+**Event-delivery guarantee:** the outbox makes the database write and event intent atomic; publishing can be at-least-once, so Service B deduplicates by event ID and commits the deduplication marker with the aggregate before acknowledging the Kafka offset.
+
 ## Correctness properties
 
 1. Business record and outbox event commit or roll back together.
