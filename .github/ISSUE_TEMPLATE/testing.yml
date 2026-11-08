@@ -1,0 +1,48 @@
+name: Test / Resilience Scenario
+description: Define an automated test, failure-injection experiment, or performance scenario
+title: "[Test] "
+labels: ["testing"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective and risk being validated
+    validations:
+      required: true
+  - type: textarea
+    id: preconditions
+    attributes:
+      label: Preconditions and test data
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Test steps or workload
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result and measurable thresholds
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence to capture
+      placeholder: Test output, dashboards, traces, consumer lag, outbox backlog, benchmark report
+  - type: dropdown
+    id: sprint
+    attributes:
+      label: Sprint
+      options:
+        - Sprint 1 — Foundations and contracts
+        - Sprint 2 — Services and PostgreSQL
+        - Sprint 3 — Outbox and Kafka
+        - Sprint 4 — Docker, Kubernetes, and Helm
+        - Sprint 5 — Observability
+        - Sprint 6 — CI/CD, GitOps, and security
+        - Sprint 7 — Load testing and hardening
+    validations:
+      required: true
