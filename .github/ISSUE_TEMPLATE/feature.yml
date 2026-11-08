@@ -1,0 +1,65 @@
+name: Feature / Engineering Task
+description: Propose an implementable PolyFlow feature or engineering task
+title: "[Feature] "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: business_case
+    attributes:
+      label: Business case
+      description: What user or operational problem does this solve?
+      placeholder: As a ..., I need ..., so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable, testable outcomes.
+      value: "- [ ] Given ..., when ..., then ...\n- [ ] Automated tests cover main and failure paths."
+    validations:
+      required: true
+  - type: dropdown
+    id: sprint
+    attributes:
+      label: Sprint
+      options:
+        - Sprint 1 — Foundations and contracts
+        - Sprint 2 — Services and PostgreSQL
+        - Sprint 3 — Outbox and Kafka
+        - Sprint 4 — Docker, Kubernetes, and Helm
+        - Sprint 5 — Observability
+        - Sprint 6 — CI/CD, GitOps, and security
+        - Sprint 7 — Load testing and hardening
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Service A
+        - Outbox Worker
+        - Service B
+        - PostgreSQL
+        - Kafka
+        - API / Contracts
+        - Observability
+        - Kubernetes / Helm
+        - CI/CD / GitOps
+        - Performance / Testing
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and design notes
+      description: Link prerequisite issues and relevant architecture decisions.
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done
+      value: "- [ ] Acceptance criteria verified\n- [ ] Tests committed\n- [ ] Docs/config updated\n- [ ] Troubleshooting telemetry added where relevant"
+    validations:
+      required: true
