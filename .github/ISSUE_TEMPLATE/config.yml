@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: PolyFlow repository and roadmap
+    url: https://github.com/AhmedRushdy/PolyFlow
+    about: Review the README and project roadmap before opening an issue.
