@@ -8,79 +8,38 @@ Simulate a SaaS usage metering platform: tenants submit API usage events; the pl
 
 ## Architecture
 
-- Service A — Go/gRPC: validates usage events and commits business data plus an outbox event in one PostgreSQL transaction.
-- Outbox Worker — Go: publishes committed outbox rows to Kafka and marks them published after broker acknowledgement.
-- Kafka: transports versioned usage events.
-- Service B — Python/FastAPI: consumes events idempotently, persists aggregates, and exposes tenant usage APIs.
-- PostgreSQL: usage records, outbox, aggregates, processed-event IDs.
-- Observability: OpenTelemetry Collector, Prometheus, Tempo, Grafana.
-- Platform: Docker, Kind/Kubernetes, Helm, Argo CD, CI, k6.
-
-### Architecture diagram
-
-The diagram below is rendered natively by GitHub from Mermaid source, so it stays version-controlled and easy to maintain.
-
 ```mermaid
-flowchart TB
-    Client[Usage client / customer application]
-    Load[k6 load tests]
+flowchart LR
+    Client([Client]) -->|gRPC| Ingest["Go · Ingestion"]
+    Ingest -->|"ACID transaction"| DB1[("PostgreSQL<br/>Usage + Outbox")]
+    DB1 --> Worker["Go · Outbox Worker"]
+    Worker -->|Publish| Kafka[["Kafka"]]
+    Kafka -->|At-least-once| Aggregate["Python · Aggregator / API"]
+    Aggregate --> DB2[("PostgreSQL<br/>Aggregates + Dedupe")]
+    Client -->|REST query| Aggregate
 
-    subgraph Cluster["Kubernetes cluster (Kind / EKS / AKS)"]
-        A["Service A — Go / gRPC<br/>Validate usage request"]
-        DB1[("PostgreSQL — Service A<br/>usage_events + outbox_events")]
-        Worker["Outbox worker — Go"]
-        Kafka[["Apache Kafka<br/>usage-events topic"]]
-        B["Service B — Python / FastAPI<br/>Consume and aggregate"]
-        DB2[("PostgreSQL — Service B<br/>tenant_usage_aggregates<br/>processed_events")]
-        API["Usage query REST API"]
-
-        Client -->|"gRPC: submit usage"| A
-        A -->|"One ACID transaction"| DB1
-        Worker -->|"Poll pending outbox rows"| DB1
-        Worker -->|"Publish with retry"| Kafka
-        Kafka -->|"At-least-once delivery"| B
-        B -->|"Atomic aggregate + dedupe commit"| DB2
-        B --> API
-        Client -->|"REST: query usage"| API
-        Load -. "Load / latency checks" .-> A
-        Load -. "Query load" .-> API
+    subgraph Platform["Platform"]
+        CI["GitHub Actions · CI"] --> GitOps["Argo CD"] --> K8s["Kubernetes · Helm"]
     end
+    K8s -. runs .-> Ingest
+    K8s -. runs .-> Worker
+    K8s -. runs .-> Aggregate
 
-    subgraph Observability["Observability"]
-        OTel["OpenTelemetry Collector"]
-        Prom["Prometheus — metrics"]
-        Tempo["Tempo — traces"]
-        Grafana["Grafana — dashboards"]
-        OTel --> Prom
-        OTel --> Tempo
-        Prom --> Grafana
-        Tempo --> Grafana
+    subgraph Telemetry["Observability"]
+        OTel["OpenTelemetry"] --> Metrics["Prometheus"] --> Grafana["Grafana"]
+        OTel --> Traces["Tempo"] --> Grafana
     end
+    Ingest -.-> OTel
+    Worker -.-> OTel
+    Aggregate -.-> OTel
 
-    A -. "traces + metrics" .-> OTel
-    Worker -. "traces + metrics" .-> OTel
-    B -. "traces + metrics" .-> OTel
-
-    subgraph Delivery["Build and delivery"]
-        Actions["GitHub Actions<br/>test · build · scan"]
-        Helm["Helm charts"]
-        Argo["Argo CD<br/>GitOps reconciliation"]
-        Actions --> Helm
-        Helm --> Argo
-        Argo -. "Deploy manifests" .-> Cluster
-    end
-
-    classDef go fill:#d9f2f2,stroke:#168b98,color:#102a33
-    classDef python fill:#e0f5df,stroke:#39934a,color:#17351b
-    classDef data fill:#e4edff,stroke:#356ac3,color:#10254a
-    classDef infra fill:#f0e5ff,stroke:#8755c4,color:#291344
-    class A,Worker go
-    class B,API python
-    class DB1,DB2 data
-    class Kafka,OTel,Prom,Tempo,Grafana,Actions,Helm,Argo infra
+    classDef app fill:#dff3f2,stroke:#218b87,color:#163c3a
+    classDef data fill:#e5edff,stroke:#527ac7,color:#1c2d50
+    classDef platform fill:#f0e7ff,stroke:#8b67bc,color:#35224b
+    class Ingest,Worker,Aggregate app
+    class DB1,DB2,Kafka data
+    class K8s,GitOps,CI,OTel,Metrics,Traces,Grafana platform
 ```
-
-**Event-delivery guarantee:** the outbox makes the database write and event intent atomic; publishing can be at-least-once, so Service B deduplicates by event ID and commits the deduplication marker with the aggregate before acknowledging the Kafka offset.
 
 ## Correctness properties
 
